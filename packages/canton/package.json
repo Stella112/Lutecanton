@@ -1,0 +1,13 @@
+{
+  "name": "@lute/canton",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal Canton JSON Ledger API v2 client (shapes verified against Canton 3.5.19 OpenAPI).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\""
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@lute/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lute treasury workflow over the Canton JSON Ledger API: parties, seeding, proposal, governance, execution, role views.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lute/canton": "workspace:*",
+    "@lute/routing": "workspace:*"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\""
+  }
+}

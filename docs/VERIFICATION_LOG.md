@@ -126,3 +126,18 @@ URL/file: https://hackmd.io/@IzUWaelHTRa_fG1NRW376w/HkBpCR5YGx
 Network/version: hackcanton-01 DevNet
 Date verified: 2026-10-06
 Evidence: Guide fetched. This supersedes the third-party veil-lite entry above. No token obtained yet.
+
+---
+
+Fact: The JSON Ledger API v2 shapes Lute uses work on Canton 3.5.19:
+- `POST /v2/dars?vetAllPackages=true` (octet-stream).
+- `POST /v2/parties {partyIdHint}`: naming a `userId` requires an existing user.
+- `POST /v2/commands/submit-and-wait-for-transaction` with `commands.{commands,commandId,userId,actAs,readAs,disclosedContracts}` and `transactionFormat.transactionShape=TRANSACTION_SHAPE_LEDGER_EFFECTS`.
+- `POST /v2/state/active-contracts` with `activeAtOffset` and `eventFormat.filtersByParty.<party>.cumulative[].identifierFilter.{WildcardFilter|TemplateFilter}.value.includeCreatedEventBlob`.
+- Template ids by package name, `#lute-core:Module:Entity`.
+- Daml values: Decimal as a string (returned at 10 dp), Int as a string, Optional as null or the value, enum as its constructor name.
+Source: Canton 3.5.19 sandbox `/docs/openapi` plus live calls
+URL/file: packages/canton/src/client.ts; packages/domain/test/ledger.e2e.test.ts
+Network/version: local `dpm sandbox` (Canton 3.5.19, one participant), loopback-only on the build host, SSH tunnel
+Date verified: 2026-10-06
+Evidence: e2e tests S1+S6, S5 and S4 pass against the live sandbox (3/3).

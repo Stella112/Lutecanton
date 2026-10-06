@@ -48,6 +48,17 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  packages/canton: {}
+
+  packages/domain:
+    dependencies:
+      '@lute/canton':
+        specifier: workspace:*
+        version: link:../canton
+      '@lute/routing':
+        specifier: workspace:*
+        version: link:../routing
+
   packages/routing: {}
 
 packages:
