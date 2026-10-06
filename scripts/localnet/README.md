@@ -14,7 +14,7 @@ bash ~/lute-sandbox/sandbox.sh stop     # state is in memory: stopping resets th
 ## From the laptop
 
 ```bash
-ssh -N -L 6864:127.0.0.1:6864 optiongenome        # JSON Ledger API tunnel
+bash scripts/localnet/tunnel.sh                   # JSON Ledger API tunnel (auto-reconnects)
 pnpm --filter @lute/web dev                         # http://localhost:3000 (uploads the DAR, allocates parties)
 LUTE_LEDGER_URL=http://localhost:6864 pnpm --filter @lute/domain test   # ledger e2e tests
 ```
