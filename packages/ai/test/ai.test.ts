@@ -36,8 +36,8 @@ test("not configured → deterministic fallback with verified numbers", async ()
   const e = await explainRoute(input, {});
   assert.equal(e.source, "fallback");
   assert.equal(e.suggestedRedeem, "4800");
-  assert.match(e.summary, /redeem exactly 4800/);
-  assert.match(e.summary, /10200 stays invested/);
+  assert.match(e.summary, /redeem exactly 4,800/);
+  assert.match(e.summary, /10,200 stays invested/);
 });
 
 test("valid Qwen answer is used and agrees", async () => {

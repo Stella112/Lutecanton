@@ -70,6 +70,14 @@ export class LedgerError extends Error {
   }
 }
 
+/**
+ * Structural check. Bundlers can load this module more than once (e.g. through
+ * workspace symlinks), which makes `instanceof LedgerError` unreliable.
+ */
+export function isLedgerError(e: unknown): e is LedgerError {
+  return e instanceof Error && e.name === "LedgerError" && typeof (e as { status?: unknown }).status === "number";
+}
+
 export interface LedgerClientConfig {
   baseUrl: string;
   /** Ledger user id. Required without auth; with auth the token's user is used. */

@@ -126,10 +126,11 @@ export async function explainRoute(input: AiInput, cfg: QwenConfig): Promise<Exp
 /** Deterministic explanation built only from verified numbers. */
 export function fallback(input: AiInput, reason: string): Explanation {
   const r = input.verifiedRoute;
+  const g = group;
   const summary =
     r.route === "CASH_ONLY"
-      ? `Liquid balance of ${input.liquidBalance} covers the ${input.obligationTotal} obligation. Pay ${r.cashUsed} from cash; all ${input.productiveBalance} of productive assets stay invested.`
-      : `The ${input.obligationTotal} obligation exceeds available cash by ${input.shortfall}. Use ${r.cashUsed} cash and redeem exactly ${r.redeemAmount} of the productive asset; ${input.remainingProductive} stays invested.`;
+      ? `Liquid balance of ${g(input.liquidBalance)} covers the ${g(input.obligationTotal)} obligation. Pay ${g(r.cashUsed)} from cash; all ${g(input.productiveBalance)} of productive assets stay invested.`
+      : `The ${g(input.obligationTotal)} obligation exceeds available cash by ${g(input.shortfall)}. Use ${g(r.cashUsed)} cash and redeem exactly ${g(r.redeemAmount)} of the productive asset; ${g(input.remainingProductive)} stays invested.`;
   const risks = [
     ...(r.route === "CASH_THEN_REDEEM" ? ["Redemption depends on the facility being open with sufficient capacity at execution time."] : []),
     ...(input.policy.minCashBuffer === "0" ? ["No minimum cash buffer is configured; cash is fully drawn down."] : []),
@@ -144,6 +145,12 @@ export function fallback(input: AiInput, reason: string): Explanation {
     agreesWithVerified: true,
     verifiedRedeem: r.redeemAmount,
   };
+}
+
+/** Thousands separators on a decimal string, without converting to a float. */
+function group(amount: string): string {
+  const [whole, frac] = amount.split(".");
+  return `${whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${frac ? `.${frac}` : ""}`;
 }
 
 function extractJson(text: string): unknown {

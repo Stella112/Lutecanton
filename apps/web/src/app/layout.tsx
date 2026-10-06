@@ -28,9 +28,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/" className="text-lg font-semibold tracking-tight text-navy">
               {BRAND.name}
             </Link>
-            <Link href="/mainnet" className="text-sm text-muted hover:text-foreground">
-              MainNet · Grofty
-            </Link>
+            {[
+              ["/review", "Review"],
+              ["/governance", "Governance"],
+              ["/settlement", "Settlement"],
+              ["/privacy", "Privacy"],
+              ["/mainnet", "MainNet · Grofty"],
+            ].map(([href, label]) => (
+              <Link key={href} href={href} className="text-sm text-muted hover:text-foreground">
+                {label}
+              </Link>
+            ))}
           </nav>
         </header>
         <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">{children}</main>

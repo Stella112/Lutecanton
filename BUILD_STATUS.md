@@ -4,7 +4,7 @@ _Last updated: 2026-10-06_
 
 ## Current milestone
 
-M1 (core Daml) and M2 (privacy and authorization) pass under Daml Script (in-process ledger). M3 router is done. Next: M4 (Qwen) and the backend, then `dpm sandbox` (M5).
+M5 (full workflow on a running ledger) is done on a local single-participant sandbox. M7 (frontend) has its core screens. DevNet (M8) is waiting on a NODERS Console invite.
 
 ## Completed
 
@@ -19,7 +19,27 @@ M1 (core Daml) and M2 (privacy and authorization) pass under Daml Script (in-pro
 - `daml/lute-tests`: 17 Daml Script tests, including 21 routing parity cases generated from the shared fixture (`scripts/gen-daml-routing-cases.mjs`).
 - Build host: VPS `optiongenome`, isolated user `lute`, Temurin JDK 21.0.12 and dpm (SDK 3.5.12) in that user's home, JVM capped at 1 GB. No system packages, no services. Driver: `scripts/vps/daml.ps1`.
 
+## Added 2026-10-06 (afternoon)
+
+- Local Canton sandbox on the build host (`scripts/localnet`): Canton 3.5.19, loopback-only, JVM 1.2 GB, reached via SSH tunnel.
+- `packages/canton`: JSON Ledger API v2 client (verified against OpenAPI + live calls) and a DevNet password-grant token provider.
+- `packages/domain`: party registry, seeding, verified-route proposal, approvals, treasury execution with the fund agent's disclosed liquidity, per-party role views.
+- `packages/ai`: aggregate-only Qwen client, Zod-validated output, deterministic fallback, disagreement detection.
+- `apps/web` backend (route handlers): state, seed, propose, approve, execute, view/[role], health, demo tools (AI overruled, facility toggle; gated by `LUTE_DEMO_TOOLS`).
+- `apps/web` screens: Treasury dashboard, Funding review, Governance, Settlement, Privacy comparison, MainNet · Grofty.
+
 ## Verified (commands actually run)
+
+- Ledger e2e on the live sandbox: 3/3 (S1+S6, S5, S4).
+- `@lute/ai`: 8/8.
+- UI walkthrough on the sandbox:
+  - AI 8,000 rejected by policy;
+  - route accepted;
+  - Outsider approval refused;
+  - execution refused at 1/2;
+  - executed at 2/2;
+  - 5 payments settled;
+  - privacy columns: Finance 2 contracts (full batch), Alice 2 (own only), Auditor 1 (aggregate), Outsider 0.
 
 - `pnpm --filter @lute/routing test` → 29/29 pass.
 - `dpm build --all` → `lute-core-0.1.0.dar`, `lute-tests-0.1.0.dar`.

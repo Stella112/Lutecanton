@@ -13,6 +13,18 @@ importers:
       '@groftylabs/dapp-sdk':
         specifier: 0.2.0
         version: 0.2.0(react@19.2.8)
+      '@lute/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
+      '@lute/canton':
+        specifier: workspace:*
+        version: link:../../packages/canton
+      '@lute/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@lute/routing':
+        specifier: workspace:*
+        version: link:../../packages/routing
       next:
         specifier: 16.3.8
         version: 16.3.8(@babel/core@7.29.7)(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -22,6 +34,9 @@ importers:
       react-dom:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4
