@@ -3,7 +3,7 @@
 | # | Question | Blocks | Owner | Status |
 |---|---|---|---|---|
 | 1 | Build host | M1 | Maris | RESOLVED: VPS optiongenome, isolated `lute` user. Too small for LocalNet (S7 blocked) |
-| 2 | Console access: guide says use **Sign in with Authfactory** after Wallet **Onboard yourself**. Does that remove the "needs administrator" message? | M8 | Maris | OPEN |
+| 2 | Console access: Wallet onboarding works, but Console SSO returns `sso_signup_not_allowed` ("not registered, ask an administrator for an invite"). Needs a NODERS invite. | M8 (DAR upload, parties) | Maris → NODERS (@mrlp8, @savetheales, @ram_noders) | BLOCKED |
 | 3 | DAR upload | M8 | NODERS guide | RESOLVED: self-service via Console → Collections → Upload DAR |
 | 4 | NODERS quickstart URL | M8 | — | RESOLVED: docs/DEVNET.md |
 | 5 | Party-scoped reads | §37 | NODERS guide | RESOLVED with caveat: one team user, reads scoped by `filtersByParty` (ledger-side projection). See docs/DEVNET.md |
