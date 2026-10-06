@@ -48,6 +48,15 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  packages/ai:
+    dependencies:
+      '@lute/routing':
+        specifier: workspace:*
+        version: link:../routing
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+
   packages/canton: {}
 
   packages/domain:

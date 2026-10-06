@@ -1,0 +1,17 @@
+{
+  "name": "@lute/ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Treasury explanation via Qwen (OpenAI-compatible API). Advisory only; deterministic fallback.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lute/routing": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\""
+  }
+}
