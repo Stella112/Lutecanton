@@ -67,6 +67,12 @@ None.
 - CashIssuer (registry) sees transfers of its asset, as any issuer/registry would.
 - Daml Script tests check active-contract visibility per party; transaction-tree witnessing is to be re-checked on a running sandbox (M5).
 
+## Web app (apps/web)
+
+- Next.js 16.3.8 + Tailwind 4, branding centralized in `src/lib/brand.ts`.
+- `/mainnet`: Grofty panel via `@groftylabs/dapp-sdk` 0.2.0. Connects, shows Party ID, network (must be `canton:da-mainnet`) and raw balance. Read-only; there is no transfer code.
+- Verified: `next build` passes; the page renders the "extension not detected" state with no console errors. The connected path is unverified until Maris connects a real wallet.
+
 ## Next action
 
 1. M4: AI layer (`packages/ai`): sanitized aggregate input, Zod-validated output, deterministic fallback.

@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+/* Institutional palette: deep navy, charcoal, white, silver, restrained teal accent. */
+:root {
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --foreground: #0f1b2d;
+  --muted: #5b6b80;
+  --line: #dde3ea;
+  --navy: #0b1f3a;
+  --accent: #1f7a8c;
+  --warn: #9a6a00;
+  --danger: #a23b3b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a1220;
+    --surface: #101b2e;
+    --foreground: #e8edf3;
+    --muted: #93a3b8;
+    --line: #22324a;
+    --navy: #e8edf3;
+    --accent: #4fb3c4;
+    --warn: #e0b04a;
+    --danger: #e07a7a;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-navy: var(--navy);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

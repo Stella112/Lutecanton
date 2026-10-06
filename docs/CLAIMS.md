@@ -17,5 +17,7 @@ Statuses: PLANNED · IMPLEMENTED · TESTED · LOCALNET VERIFIED · DEVNET VERIFI
 | BitSafe governance | PLANNED | M6; multi-node BLOCKED by hardware |
 | Node-failure tolerance (S7) | BLOCKED | needs a ≥ 16–32 GB host |
 | Qwen explanation | PLANNED | M4 |
-| Grofty / MainNet (MNET-1…6) | PLANNED | requires Maris approval |
+| Grofty connect + Party ID + balance (MNET-1, MNET-2) | IMPLEMENTED (not yet verified with a live wallet) | `apps/web` /mainnet; needs Maris to connect in Chrome |
+| Real tiny CC/USDCx transfer via Grofty (MNET-3) | PLANNED | needs explicit approval of asset, amount and receiver |
+| Lute DAR vetted and executing on MainNet (MNET-4/5) | BLOCKED | no documented vetting path on Grofty's participant (OQ 9) |
 | Real USYC / real RWA redemption | PLANNED | no verified access; mocks only |

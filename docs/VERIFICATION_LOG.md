@@ -91,3 +91,29 @@ URL/file: ~/.dpm/cache/components/daml-script/3.5.3/daml-script-2.1.dar (Daml/Sc
 Network/version: SDK 3.5.12
 Date verified: 2026-10-06
 Evidence: Source inspected; used in passing tests.
+
+---
+
+Fact: Grofty dApp integration (from `@groftylabs/dapp-sdk` 0.2.0 source and README; requires Grofty Wallet ≥ 2.0.4):
+- The provider is injected at `window.cantonWallet` and also announced via `canton:announceProvider` / `canton:requestProvider`.
+- Grofty is **MainNet only**: it reports `canton:da-mainnet` and has no network switching.
+- Methods: `connect`, `status`, `getActiveNetwork`, `listAccounts`, `getPrimaryAccount`, `signMessage`, `prepareExecute` (plus the SDK's `prepareExecuteAndWait`), and `ledgerApi`.
+- `prepareExecute` accepts either a simple transfer `{ receiver, amount, tokenSymbol?, memo? }` (defaults to CC) or generic Daml `commands` with `disclosedContracts`, `commandId`, `readAs`, `synchronizerId` and `packageIdSelectionPreference`.
+- It submits as a **single party**: `actAs` is refused, and `readAs` may name only the wallet's own party.
+- `ledgerApi` is a narrow, read-only, party-scoped reader: `balance`, `wallets`, `/v2/state/ledger-end`, `/v2/state/active-contracts`, `/v2/updates/update-by-id`, `/v2/events/events-by-contract-id`.
+- It never exposes a ledger endpoint or token to the page.
+- Errors: 4001 user rejected, 4100 unauthorized, -32601 not found, -32602 invalid params, -32603 internal or approval timeout.
+Source: Grofty official GitHub (groftywallet/grofty-dapp-sdk)
+URL/file: https://github.com/groftywallet/grofty-dapp-sdk (commit 6d52084, 2026-08-27): README.md, src/types.ts, src/discovery.ts
+Network/version: MainNet; SDK 0.2.0
+Date verified: 2026-10-06
+Evidence: Source read. No connection attempted yet.
+
+---
+
+Fact (OPEN): Generic Daml commands for a custom template (Lute) through Grofty need `lute-core` vetted on Grofty's hosting participant. The SDK does not document any way to vet a third-party DAR. Until proven otherwise, MNET-4/5 (Lute custom contracts on MainNet) are BLOCKED, and the honest MainNet path is spec §30: a real tiny CC/USDCx transfer via Grofty (MNET-3) linked to a Lute batch/line by memo.
+Source: Inference from the SDK docs above; to be confirmed with Grofty (Telegram t.me/Grofty_Community)
+URL/file: —
+Network/version: MainNet
+Date verified: 2026-10-06
+Evidence: None yet. Listed in OPEN_QUESTIONS #9.

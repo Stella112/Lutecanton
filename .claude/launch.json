@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lute-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@lute/web", "dev"],
+      "port": 3000
+    }
+  ]
+}

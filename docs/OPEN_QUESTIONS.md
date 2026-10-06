@@ -10,4 +10,5 @@
 | 6 | Which CIP-56 assets exist on hackcanton-01 DevNet (besides CC)? | M9 | Claude (after login) | OPEN |
 | 7 | What are the current BitSafe challenge requirements (decentralized party? node-failure test?) on the HackCanton S3 challenge page? | M6 scope | Maris (link) / Claude | OPEN |
 | 8 | Qwen provider, base URL and model to use? | M4 (fallback works without it) | Maris | OPEN |
-| 9 | Grofty: can it submit arbitrary vetted Daml choices via CIP-0103, and what is the MainNet DAR vetting path? | M10 | Claude | OPEN |
+| 9 | Grofty accepts generic Daml commands (verified in SDK). Can a third-party DAR (lute-core) be vetted on Grofty's hosting participant? | MNET-4/5 | Maris → Grofty TG | OPEN |
+| 10 | MNET-3 test: which asset (CC or USDCx), what tiny amount, and which receiver party (a second wallet Maris controls)? Needs explicit approval. | MNET-3 | Maris | OPEN |
