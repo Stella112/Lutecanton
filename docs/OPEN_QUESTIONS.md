@@ -3,10 +3,10 @@
 | # | Question | Blocks | Owner | Status |
 |---|---|---|---|---|
 | 1 | Build host | M1 | Maris | RESOLVED: VPS optiongenome, isolated `lute` user. Too small for LocalNet (S7 blocked) |
-| 2 | Can Maris sign in to the hackcanton-01 Console with the HackCanton platform login? | M8 DevNet | Maris | OPEN |
-| 3 | Is DAR upload on hackcanton-01 self-service in the Console, or admin-only? | M8 DevNet | Maris / NODERS | OPEN |
-| 4 | What is the URL of the official NODERS "Canton DevNet Quickstart — HackCanton shared node" guide? We need it to confirm the grant type, client_id, scopes and user rights. | M8 DevNet | Maris | OPEN |
-| 5 | Can one ledger user on the shared node get `readAs` rights scoped per party, so we can demo party-scoped reads (§37)? Or do we need one user per role? | Privacy demo on DevNet | Claude (after login) | OPEN |
+| 2 | Console access: guide says use **Sign in with Authfactory** after Wallet **Onboard yourself**. Does that remove the "needs administrator" message? | M8 | Maris | OPEN |
+| 3 | DAR upload | M8 | NODERS guide | RESOLVED: self-service via Console → Collections → Upload DAR |
+| 4 | NODERS quickstart URL | M8 | — | RESOLVED: docs/DEVNET.md |
+| 5 | Party-scoped reads | §37 | NODERS guide | RESOLVED with caveat: one team user, reads scoped by `filtersByParty` (ledger-side projection). See docs/DEVNET.md |
 | 6 | Which CIP-56 assets exist on hackcanton-01 DevNet (besides CC)? | M9 | Claude (after login) | OPEN |
 | 7 | What are the current BitSafe challenge requirements (decentralized party? node-failure test?) on the HackCanton S3 challenge page? | M6 scope | Maris (link) / Claude | OPEN |
 | 8 | Qwen provider, base URL and model to use? | M4 (fallback works without it) | Maris | OPEN |

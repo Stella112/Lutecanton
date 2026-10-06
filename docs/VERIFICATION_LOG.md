@@ -117,3 +117,12 @@ URL/file: —
 Network/version: MainNet
 Date verified: 2026-10-06
 Evidence: None yet. Listed in OPEN_QUESTIONS #9.
+
+---
+
+Fact: NODERS hackcanton-01 official guide. One AppFactory account serves as the identity for the Console, Ledger API and Wallet. The ledger user id is the Keycloak `sub`, and parties are namespaced per team with a quota of 20. A party created in the Console automatically grants the team user CanActAs and CanReadAs. DAR upload is Console → Collections → Upload DAR. Tokens use the password grant with client_id `web-app-ui-hackcanton-01-devnet` and scope `openid daml_ledger_api offline_access`; aud is `https://hackcanton-01.devnet.naas.noders.services` and tokens expire after 3 h. JSON API: `/v2/version`, `/v2/state/ledger-end`, `/v2/commands/submit-and-wait-for-transaction`, `/v2/state/active-contracts` with `filtersByParty`, `/v2/updates`, `/docs/openapi`. Console sign-in is "Sign in with Authfactory" (SSO). User management is hidden for tenants.
+Source: Official NODERS guide (shared by HackCanton organisers)
+URL/file: https://hackmd.io/@IzUWaelHTRa_fG1NRW376w/HkBpCR5YGx
+Network/version: hackcanton-01 DevNet
+Date verified: 2026-10-06
+Evidence: Guide fetched. This supersedes the third-party veil-lite entry above. No token obtained yet.
