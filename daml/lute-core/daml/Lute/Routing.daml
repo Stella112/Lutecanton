@@ -1,0 +1,72 @@
+-- | On-ledger mirror of packages/routing (spec §18, §19).
+-- Must agree with the TypeScript router on every shared fixture; the parity
+-- tests in lute-tests are generated from packages/routing/test/cases.json.
+module Lute.Routing where
+
+import Lute.Types
+
+routerVersion : Text
+routerVersion = "lute-router/1"
+
+data BlockedReason
+  = ZeroObligation
+  | RouteNotAllowed
+  | InsufficientLiquidity
+  | RedemptionCapExceeded
+  deriving (Eq, Show)
+
+data RoutingPolicy = RoutingPolicy with
+    minCashBuffer : Decimal
+    maxRedeemPerExecution : Optional Decimal
+    allowedRoutes : [Route]
+  deriving (Eq, Show)
+
+data RoutingInput = RoutingInput with
+    cash : Decimal
+    productive : Decimal
+    redeemable : Decimal
+    obligation : Decimal
+    policy : RoutingPolicy
+  deriving (Eq, Show)
+
+data RoutingResult = RoutingResult with
+    route : Optional Route
+    blockedReason : Optional BlockedReason
+    cashAvailable : Decimal
+    cashUsed : Decimal
+    shortfall : Decimal
+    redeemAmount : Decimal
+    remainingProductive : Decimal
+  deriving (Eq, Show)
+
+-- | Left for malformed input; Right with a blockedReason when policy or
+-- liquidity prevents funding (nothing is redeemed in that case).
+computeFundingRoute : RoutingInput -> Either Text RoutingResult
+computeFundingRoute i
+  | i.cash < 0.0 || i.productive < 0.0 || i.redeemable < 0.0 || i.obligation < 0.0 =
+      Left "negative amounts are not allowed"
+  | i.policy.minCashBuffer < 0.0 = Left "negative cash buffer"
+  | optional False (< 0.0) i.policy.maxRedeemPerExecution = Left "negative redemption cap"
+  | i.redeemable > i.productive = Left "redeemable amount exceeds productive position"
+  | i.obligation == 0.0 = Right (blocked ZeroObligation)
+  | shortfall == 0.0 =
+      if CashOnly `elem` i.policy.allowedRoutes
+        then Right (result (Some CashOnly) None 0.0 i.productive)
+        else Right (blocked RouteNotAllowed)
+  | CashThenRedeem `notElem` i.policy.allowedRoutes = Right (blocked RouteNotAllowed)
+  | shortfall > i.redeemable = Right (blocked InsufficientLiquidity)
+  | optional False (shortfall >) i.policy.maxRedeemPerExecution = Right (blocked RedemptionCapExceeded)
+  | otherwise = Right (result (Some CashThenRedeem) None shortfall (i.productive - shortfall))
+  where
+    cashAvailable = max 0.0 (i.cash - i.policy.minCashBuffer)
+    cashUsed = min cashAvailable i.obligation
+    shortfall = i.obligation - cashUsed
+    blocked reason = result None (Some reason) 0.0 i.productive
+    result route reason redeem remaining = RoutingResult with
+      route
+      blockedReason = reason
+      cashAvailable
+      cashUsed
+      shortfall
+      redeemAmount = redeem
+      remainingProductive = remaining

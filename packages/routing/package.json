@@ -1,0 +1,13 @@
+{
+  "name": "@lute/routing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic treasury funding router. Pure functions, no AI, no I/O.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\""
+  }
+}

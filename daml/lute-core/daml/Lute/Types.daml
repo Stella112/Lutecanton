@@ -1,0 +1,41 @@
+module Lute.Types where
+
+-- | Funding routes a treasury policy can allow.
+data Route = CashOnly | CashThenRedeem
+  deriving (Eq, Show, Ord)
+
+-- | Identifies an instrument by its issuer/registry party and id.
+data InstrumentRef = InstrumentRef with
+    issuer : Party
+    id : Text
+  deriving (Eq, Show, Ord)
+
+-- | One payment line of an obligation.
+data PayLine = PayLine with
+    payee : Party
+    amount : Decimal
+    lineRef : Text
+  deriving (Eq, Show)
+
+-- | The verified funding route for an obligation, recomputed on-ledger.
+data FundingPlan = FundingPlan with
+    batchRef : Text
+    cashAvailable : Decimal
+    cashUsed : Decimal
+    shortfall : Decimal
+    productiveAvailable : Decimal
+    redeemAmount : Decimal
+    remainingProductive : Decimal
+    route : Route
+    engineVersion : Text
+  deriving (Eq, Show)
+
+-- | Informational AI note attached to a proposal. Never authoritative.
+data AiNote = AiNote with
+    summary : Text
+    recommendedRedeem : Optional Decimal
+    agreesWithVerified : Bool
+  deriving (Eq, Show)
+
+data SettlementState = Settled
+  deriving (Eq, Show)

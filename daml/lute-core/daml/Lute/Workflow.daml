@@ -1,0 +1,258 @@
+-- | Obligation → verified funding plan → governed approval → atomic execution.
+module Lute.Workflow where
+
+import DA.Action (foldlA, when)
+import DA.List (unique)
+import DA.Optional (fromSomeNote)
+import Lute.Policy
+import Lute.Receipts
+import Lute.Routing
+import Lute.TestAsset
+import Lute.Types
+
+-- | The obligation. Visible to the treasury and finance only: payees are NOT
+-- observers, so no payee can learn other payees' amounts (spec §17.2).
+template PaymentBatch
+  with
+    treasury : Party
+    financeViewer : Party
+    batchRef : Text
+    period : Text
+    lines : [PayLine]
+    total : Decimal
+    paymentInstrument : Text
+    createdAt : Time
+  where
+    signatory treasury
+    observer financeViewer
+    ensure
+      batchRef /= ""
+      && not (null lines)
+      && all (\l -> l.amount > 0.0 && l.lineRef /= "") lines
+      && unique (map (\l -> l.lineRef) lines)
+      && total == sum (map (\l -> l.amount) lines)
+
+    -- | Recomputes the funding route on-ledger and records it in a proposal
+    -- awaiting approvals. `proposedRedeem` (from the backend/AI layer) must
+    -- equal the verified redemption, otherwise the proposal is rejected.
+    -- Consumes the batch, so one batch can have at most one live proposal.
+    choice ProposeExecution : ContractId ExecutionProposal
+      with
+        policyCid : ContractId TreasuryPolicy
+        cashHoldings : [ContractId Holding]
+        productiveHoldings : [ContractId Holding]
+        facilityCid : Optional (ContractId RedemptionFacility)
+        proposedRedeem : Decimal
+        aiNote : Optional AiNote
+      controller treasury
+      do
+        policy <- fetch policyCid
+        assertMsg "policy belongs to a different treasury" (policy.treasury == treasury)
+        assertMsg "batch instrument does not match policy payment instrument"
+          (paymentInstrument == policy.paymentInstrument.id)
+        assertMsg "finance viewer does not match policy" (financeViewer == policy.financeViewer)
+        plan <- verifiedPlan policy batchRef total cashHoldings productiveHoldings facilityCid
+        assertMsg ("rejected by treasury policy: proposed redemption " <> show proposedRedeem
+                   <> " does not match verified redemption " <> show plan.redeemAmount)
+          (proposedRedeem == plan.redeemAmount)
+        when (plan.redeemAmount > 0.0) $ do
+          facility <- fetch (fromSomeNote "redemption requires a facility" facilityCid)
+          assertMsg "redemption facility is closed" facility.isOpen
+        create ExecutionProposal with
+          treasury
+          policyCid
+          policyVersion = policy.version
+          organizationName = policy.organizationName
+          auditor = policy.auditor
+          approvers = policy.approvers
+          requiredApprovals = approvalsRequiredFor policy total
+          approvals = []
+          batch = this
+          plan
+          aiNote
+
+-- | Native Daml 2-of-3 governance (spec §20). Each approval makes the
+-- approver a signatory, so execution carries the approvers' authority.
+--
+-- Privacy note: approvers and finance are stakeholders here and therefore
+-- witness the whole execution, including individual lines. Payees, the
+-- auditor and the fund agent are not.
+template ExecutionProposal
+  with
+    treasury : Party
+    policyCid : ContractId TreasuryPolicy
+    policyVersion : Int
+    organizationName : Text
+    auditor : Party
+    approvers : [Party]
+    requiredApprovals : Int
+    approvals : [Party]
+    batch : PaymentBatch
+    plan : FundingPlan
+    aiNote : Optional AiNote
+  where
+    signatory treasury, approvals
+    observer approvers, batch.financeViewer
+    ensure unique approvals && all (`elem` approvers) approvals && requiredApprovals >= 1
+
+    choice Approve : ContractId ExecutionProposal
+      with
+        approver : Party
+      controller approver
+      do
+        assertMsg "not an authorized approver" (approver `elem` approvers)
+        assertMsg "duplicate approval" (approver `notElem` approvals)
+        create this with approvals = approver :: approvals
+
+    -- | Rejection returns the batch to the treasury for rework.
+    choice Reject : ContractId PaymentBatch
+      with
+        approver : Party
+      controller approver
+      do
+        assertMsg "not an authorized approver" (approver `elem` approvers)
+        create batch
+
+    -- | Recomputes the plan against current holdings, then atomically:
+    -- redeems the exact shortfall, pays every line, and creates receipts.
+    -- Any failure rolls back the whole transaction.
+    --
+    -- Submitted by the treasury: in Daml 3 the submitter must see every input
+    -- contract, and approvers deliberately cannot see treasury holdings. The
+    -- approvers' authority comes from their signatures on this proposal, so
+    -- execution is impossible until the threshold is met.
+    choice Execute : ContractId FinanceReceipt
+      with
+        cashHoldings : [ContractId Holding]
+        productiveHoldings : [ContractId Holding]
+        facilityCid : Optional (ContractId RedemptionFacility)
+      controller treasury
+      do
+        assertMsg ("insufficient approvals: " <> show (length approvals) <> " of " <> show requiredApprovals)
+          (length approvals >= requiredApprovals)
+        policy <- fetch policyCid
+        assertMsg "treasury policy changed since proposal" (policy.version == policyVersion)
+        current <- verifiedPlan policy batch.batchRef batch.total cashHoldings productiveHoldings facilityCid
+        assertMsg "funding conditions changed since approval"
+          (current.route == plan.route && current.cashUsed == plan.cashUsed && current.redeemAmount == plan.redeemAmount)
+
+        redeemed <- if current.redeemAmount > 0.0
+          then do
+            (_, cash, _) <- exercise (fromSomeNote "redemption requires a facility" facilityCid)
+              Redeem with holdings = productiveHoldings; redeemAmount = current.redeemAmount
+            pure [cash]
+          else pure []
+
+        pool <- case cashHoldings ++ redeemed of
+          [] -> abort "no payment asset available"
+          first :: rest -> exercise first Merge with others = rest
+
+        settledAt <- getTime
+        let pay (remaining, acc) line = do
+              source <- case remaining of
+                Some p -> pure p
+                None -> abort "payment asset exhausted before all lines were paid"
+              (out, rest) <- exercise source Split with splitAmount = line.amount
+              holding <- exercise out Transfer with newOwner = line.payee
+              create PayeeReceipt with
+                treasury
+                payee = line.payee
+                employer = organizationName
+                batchRef = batch.batchRef
+                lineRef = line.lineRef
+                period = batch.period
+                amount = line.amount
+                paymentInstrument = batch.paymentInstrument
+                holding
+                settlementState = Settled
+                settledAt
+              pure (rest, acc ++ [PayoutRef with lineRef = line.lineRef; payee = line.payee; amount = line.amount; holding])
+        (_, payouts) <- foldlA pay (Some pool, []) batch.lines
+
+        create AuditReceipt with
+          treasury
+          auditor
+          organizationName
+          batchRef = batch.batchRef
+          period = batch.period
+          total = batch.total
+          lineCount = length batch.lines
+          paymentInstrument = batch.paymentInstrument
+          route = current.route
+          redeemAmount = current.redeemAmount
+          policyVersion
+          requiredApprovals
+          approvals
+          settlementState = Settled
+          settledAt
+        create FinanceReceipt with
+          treasury
+          financeViewer = batch.financeViewer
+          organizationName
+          batchRef = batch.batchRef
+          period = batch.period
+          total = batch.total
+          paymentInstrument = batch.paymentInstrument
+          plan = current
+          aiNote
+          policyVersion
+          requiredApprovals
+          approvals
+          payouts
+          settlementState = Settled
+          settledAt
+
+-- | Sums holdings after checking each belongs to `owner` and `inst`.
+sumHoldings : Party -> InstrumentRef -> [ContractId Holding] -> Update Decimal
+sumHoldings owner inst cids = do
+  assertMsg "duplicate holding ids" (unique cids)
+  amounts <- forA cids $ \cid -> do
+    h <- fetch cid
+    assertMsg ("holding is not " <> inst.id <> " owned by the treasury")
+      (h.owner == owner && h.issuer == inst.issuer && h.instrument == inst.id)
+    pure h.amount
+  pure (sum amounts)
+
+-- | Computes the authoritative funding plan from ledger state (spec §19).
+-- Aborts when the input is invalid or the route is blocked.
+verifiedPlan
+  : TreasuryPolicy -> Text -> Decimal
+  -> [ContractId Holding] -> [ContractId Holding] -> Optional (ContractId RedemptionFacility)
+  -> Update FundingPlan
+verifiedPlan policy batchRef obligation cashCids productiveCids facilityCid = do
+  cash <- sumHoldings policy.treasury policy.paymentInstrument cashCids
+  productive <- sumHoldings policy.treasury policy.productiveInstrument productiveCids
+  redeemable <- case facilityCid of
+    None -> pure 0.0
+    Some fcid -> do
+      f <- fetch fcid
+      assertMsg "facility does not match the policy's instruments"
+        (f.treasury == policy.treasury
+          && f.fundAgent == policy.productiveInstrument.issuer
+          && f.productiveInstrument == policy.productiveInstrument.id
+          && f.cashIssuer == policy.paymentInstrument.issuer
+          && f.cashInstrument == policy.paymentInstrument.id)
+      pure (min productive f.capacity)
+  let input = RoutingInput with
+        cash
+        productive
+        redeemable
+        obligation
+        policy = routingPolicyOf policy
+  r <- case computeFundingRoute input of
+    Left err -> abort ("invalid routing input: " <> err)
+    Right r -> pure r
+  route <- case (r.route, r.blockedReason) of
+    (Some route, _) -> pure route
+    (None, Some reason) -> abort ("blocked: " <> show reason)
+    (None, None) -> abort "blocked"
+  pure FundingPlan with
+    batchRef
+    cashAvailable = r.cashAvailable
+    cashUsed = r.cashUsed
+    shortfall = r.shortfall
+    productiveAvailable = productive
+    redeemAmount = r.redeemAmount
+    remainingProductive = r.remainingProductive
+    route
+    engineVersion = routerVersion

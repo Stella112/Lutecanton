@@ -1,0 +1,208 @@
+-- | LocalNet demo world: parties, MOCK assets (cUSD-L, cMMF-L), policy, batch.
+module Lute.Test.Setup where
+
+import DA.Optional (optionalToList)
+import DA.Text (isInfixOf)
+import Daml.Script
+import Lute.Policy
+import Lute.Receipts (FinanceReceipt)
+import Lute.TestAsset
+import Lute.Types
+import Lute.Workflow
+
+-- | MOCK LOCALNET PAYMENT ASSET
+cashId : Text
+cashId = "cUSD-L"
+
+-- | MOCK LOCALNET PRODUCTIVE RWA
+rwaId : Text
+rwaId = "cMMF-L"
+
+data Parties = Parties with
+    treasury : Party
+    financeOp : Party
+    treasuryOp : Party
+    riskOp : Party
+    financeViewer : Party
+    alice : Party
+    ben : Party
+    chidi : Party
+    david : Party
+    eva : Party
+    auditor : Party
+    fundAgent : Party
+    cashIssuer : Party
+    outsider : Party
+
+payees : Parties -> [Party]
+payees p = [p.alice, p.ben, p.chidi, p.david, p.eva]
+
+allocateParties : Script Parties
+allocateParties = do
+  let party h = allocatePartyByHint (PartyIdHint h)
+  treasury <- party "Treasury"
+  financeOp <- party "FinanceOp"
+  treasuryOp <- party "TreasuryOp"
+  riskOp <- party "RiskOp"
+  financeViewer <- party "FinanceViewer"
+  alice <- party "Alice"
+  ben <- party "Ben"
+  chidi <- party "Chidi"
+  david <- party "David"
+  eva <- party "Eva"
+  auditor <- party "Auditor"
+  fundAgent <- party "FundAgent"
+  cashIssuer <- party "CashIssuer"
+  outsider <- party "Outsider"
+  pure Parties with
+    treasury; financeOp; treasuryOp; riskOp; financeViewer
+    alice; ben; chidi; david; eva
+    auditor; fundAgent; cashIssuer; outsider
+
+data Scenario = Scenario with
+    cash : Decimal
+    rwa : Decimal
+    -- | Line amounts, assigned to Alice, Ben, Chidi, David, Eva in order.
+    amounts : [Decimal]
+    minCashBuffer : Decimal
+    maxRedeem : Optional Decimal
+    capacity : Decimal
+    fundLiquidity : Decimal
+
+-- | The spec §6 demo: 20,000 cash, 15,000 RWA, 24,800 payroll.
+demo : Scenario
+demo = Scenario with
+  cash = 20000.0
+  rwa = 15000.0
+  amounts = [5200.0, 4800.0, 5000.0, 4600.0, 5200.0]
+  minCashBuffer = 0.0
+  maxRedeem = None
+  capacity = 50000.0
+  fundLiquidity = 100000.0
+
+data World = World with
+    p : Parties
+    policy : ContractId TreasuryPolicy
+    cash : [ContractId Holding]
+    productive : [ContractId Holding]
+    facility : ContractId RedemptionFacility
+    batch : ContractId PaymentBatch
+
+setupWorld : Scenario -> Script World
+setupWorld s = do
+  p <- allocateParties
+  let mint issuer owner instrument amount =
+        if amount > 0.0
+          then (\cid -> [cid]) <$> submit issuer do
+            createCmd Holding with issuer; owner; instrument; amount
+          else pure []
+  policy <- submit p.treasury do
+    createCmd TreasuryPolicy with
+      treasury = p.treasury
+      organizationName = "Lute Demo Co (LocalNet)"
+      financeViewer = p.financeViewer
+      approvers = [p.financeOp, p.treasuryOp, p.riskOp]
+      approvalThreshold = 2
+      largePaymentThreshold = 10000.0
+      minCashBuffer = s.minCashBuffer
+      maxRedeemPerExecution = s.maxRedeem
+      allowedRoutes = [CashOnly, CashThenRedeem]
+      paymentInstrument = InstrumentRef with issuer = p.cashIssuer; id = cashId
+      productiveInstrument = InstrumentRef with issuer = p.fundAgent; id = rwaId
+      auditor = p.auditor
+      version = 1
+  cash <- mint p.cashIssuer p.treasury cashId s.cash
+  productive <- mint p.fundAgent p.treasury rwaId s.rwa
+  liquidity <- submit p.cashIssuer do
+    createCmd Holding with issuer = p.cashIssuer; owner = p.fundAgent; instrument = cashId; amount = s.fundLiquidity
+  facility <- submit p.fundAgent do
+    createCmd RedemptionFacility with
+      fundAgent = p.fundAgent
+      treasury = p.treasury
+      productiveInstrument = rwaId
+      cashIssuer = p.cashIssuer
+      cashInstrument = cashId
+      liquidity
+      capacity = s.capacity
+      isOpen = True
+  now <- getTime
+  let lines = zipWith (\(payee, amount) n -> PayLine with payee; amount; lineRef = "PAY-2026-10-L" <> show n)
+        (zip (payees p) s.amounts) [1 .. length s.amounts]
+  batch <- submit p.treasury do
+    createCmd PaymentBatch with
+      treasury = p.treasury
+      financeViewer = p.financeViewer
+      batchRef = "PAY-2026-10"
+      period = "2026-10"
+      lines
+      total = sum s.amounts
+      paymentInstrument = cashId
+      createdAt = now
+  pure World with p; policy; cash; productive; facility; batch
+
+propose : World -> Decimal -> Script (ContractId ExecutionProposal)
+propose w redeem = submit w.p.treasury do
+  exerciseCmd w.batch ProposeExecution with
+    policyCid = w.policy
+    cashHoldings = w.cash
+    productiveHoldings = w.productive
+    facilityCid = Some w.facility
+    proposedRedeem = redeem
+    aiNote = None
+
+approve : Party -> ContractId ExecutionProposal -> Script (ContractId ExecutionProposal)
+approve approver prop = submit approver do exerciseCmd prop Approve with approver
+
+executeCmd : World -> ContractId RedemptionFacility -> ContractId ExecutionProposal -> Commands (ContractId FinanceReceipt)
+executeCmd w facility prop = exerciseCmd prop Execute with
+  cashHoldings = w.cash
+  productiveHoldings = w.productive
+  facilityCid = Some facility
+
+-- | The fund agent's liquidity holding, explicitly disclosed to the treasury.
+-- Daml 3 requires the submitter to see every input contract; redemption pays
+-- out of the fund agent's private liquidity, so the fund agent shares it as a
+-- disclosed contract (the same pattern CIP-56 registries use).
+liquidityDisclosures : World -> ContractId RedemptionFacility -> Script [Disclosure]
+liquidityDisclosures w facility = do
+  -- An archived facility (e.g. already used by a prior execution) has nothing to disclose.
+  facilityState <- queryContractId w.p.fundAgent facility
+  case facilityState of
+    None -> pure []
+    Some f -> optionalToList <$> queryDisclosure w.p.fundAgent f.liquidity
+
+execute : World -> ContractId RedemptionFacility -> ContractId ExecutionProposal -> Script (ContractId FinanceReceipt)
+execute w facility prop = do
+  ds <- liquidityDisclosures w facility
+  submit (actAs w.p.treasury <> discloseMany ds) (executeCmd w facility prop)
+
+executeMustFail : World -> Party -> ContractId RedemptionFacility -> ContractId ExecutionProposal -> Script ()
+executeMustFail w submitter facility prop = do
+  ds <- liquidityDisclosures w facility
+  submitMustFail (actAs submitter <> discloseMany ds) (executeCmd w facility prop)
+
+-- | Like executeMustFail, but also checks the rejection reason, so a test
+-- cannot pass because of an unrelated failure (e.g. contract visibility).
+executeRejectedWith : Text -> World -> ContractId RedemptionFacility -> ContractId ExecutionProposal -> Script ()
+executeRejectedWith reason w facility prop = do
+  ds <- liquidityDisclosures w facility
+  trySubmit (actAs w.p.treasury <> discloseMany ds) (executeCmd w facility prop) >>= expectRejected reason
+
+rejectedWith : Text -> Party -> Commands a -> Script ()
+rejectedWith reason submitter cmds = trySubmit (actAs submitter) cmds >>= expectRejected reason
+
+expectRejected : Text -> Either SubmitError a -> Script ()
+expectRejected reason result = case result of
+  Right _ -> abort ("expected rejection containing \"" <> reason <> "\" but the submission succeeded")
+  Left err -> assertMsg ("expected rejection containing \"" <> reason <> "\" but got: " <> show err)
+    (reason `isInfixOf` show err)
+
+-- | Sum of `instrument` holdings owned by `owner`, read with owner's own rights.
+balanceOf : Party -> Text -> Script Decimal
+balanceOf owner instrument = do
+  hs <- query @Holding owner
+  pure $ sum $ map (\(_, h) -> h.amount) $ filter (\(_, h) -> h.owner == owner && h.instrument == instrument) hs
+
+assertEq : (Eq a, Show a) => Text -> a -> a -> Script ()
+assertEq label expected actual =
+  assertMsg (label <> ": expected " <> show expected <> " but got " <> show actual) (expected == actual)

@@ -1,0 +1,133 @@
+-- | TEST ASSET INFRASTRUCTURE — NOT A REAL TOKEN.
+--
+-- Simple Daml holdings (spec §16 "Fallback B") used for the LocalNet mock
+-- payment asset (cUSD-L, "MOCK LOCALNET PAYMENT ASSET"), the mock productive
+-- RWA (cMMF-L, "MOCK LOCALNET PRODUCTIVE RWA") and, if no suitable asset
+-- exists on DevNet, a clearly labelled DEVNET TEST RWA.
+-- Production assets should use the Canton Network Token Standard (CIP-56).
+module Lute.TestAsset where
+
+import DA.Action (foldlA)
+
+-- | A holding of `amount` units of `instrument`, issued by `issuer`.
+-- The issuer signs (registry authority); the owner controls transfers.
+template Holding
+  with
+    issuer : Party
+    owner : Party
+    instrument : Text
+    amount : Decimal
+  where
+    signatory issuer
+    observer owner
+    ensure amount > 0.0 && instrument /= ""
+
+    -- | Splits off `splitAmount`; returns (split, remainder if any).
+    choice Split : (ContractId Holding, Optional (ContractId Holding))
+      with
+        splitAmount : Decimal
+      controller owner
+      do
+        assertMsg "split amount must be positive and at most the holding amount"
+          (splitAmount > 0.0 && splitAmount <= amount)
+        split <- create this with amount = splitAmount
+        rest <- if splitAmount == amount
+          then pure None
+          else Some <$> create this with amount = amount - splitAmount
+        pure (split, rest)
+
+    -- | Merges matching holdings of the same issuer, owner and instrument.
+    choice Merge : ContractId Holding
+      with
+        others : [ContractId Holding]
+      controller owner
+      do
+        total <- foldlA (\acc cid -> do
+            h <- fetch cid
+            assertMsg "merge: holdings must share issuer, owner and instrument"
+              (h.issuer == issuer && h.owner == owner && h.instrument == instrument)
+            archive cid
+            pure (acc + h.amount)) amount others
+        create this with amount = total
+
+    choice Transfer : ContractId Holding
+      with
+        newOwner : Party
+      controller owner
+      do create this with owner = newOwner
+
+-- | MOCK redemption facility for the productive test asset (stable 1.00 NAV,
+-- money-market style). Redeeming burns productive units and pays the same
+-- amount of payment asset from the fund agent's liquidity.
+template RedemptionFacility
+  with
+    fundAgent : Party
+    treasury : Party
+    productiveInstrument : Text
+    cashIssuer : Party
+    cashInstrument : Text
+    -- | Fund-agent-owned payment asset used to pay redemptions.
+    liquidity : ContractId Holding
+    -- | Remaining redemption capacity in the current window (mock daily limit).
+    capacity : Decimal
+    isOpen : Bool
+  where
+    signatory fundAgent
+    observer treasury
+    ensure capacity >= 0.0
+
+    -- | Returns (updated facility, cash paid to treasury, productive remainder).
+    choice Redeem : (ContractId RedemptionFacility, ContractId Holding, Optional (ContractId Holding))
+      with
+        holdings : [ContractId Holding]
+        redeemAmount : Decimal
+      controller treasury
+      do
+        assertMsg "redemption facility is closed" isOpen
+        assertMsg "redemption amount must be positive" (redeemAmount > 0.0)
+        assertMsg "redemption exceeds facility capacity" (redeemAmount <= capacity)
+        amounts <- forA holdings $ \cid -> do
+          h <- fetch cid
+          assertMsg "redeem: holding is not the treasury's productive asset"
+            (h.issuer == fundAgent && h.owner == treasury && h.instrument == productiveInstrument)
+          archive cid
+          pure h.amount
+        let held = sum amounts
+        assertMsg "insufficient productive holdings" (held >= redeemAmount)
+        remainder <- if held == redeemAmount
+          then pure None
+          else Some <$> create Holding with
+            issuer = fundAgent
+            owner = treasury
+            instrument = productiveInstrument
+            amount = held - redeemAmount
+        liq <- fetch liquidity
+        assertMsg "facility liquidity is not the configured payment asset"
+          (liq.issuer == cashIssuer && liq.owner == fundAgent && liq.instrument == cashInstrument)
+        -- Strictly greater: the facility always keeps a liquidity holding.
+        assertMsg "insufficient fund liquidity" (liq.amount > redeemAmount)
+        (paid, liquidityRest) <- exercise liquidity Split with splitAmount = redeemAmount
+        newLiquidity <- case liquidityRest of
+          Some l -> pure l
+          None -> abort "insufficient fund liquidity"
+        cash <- exercise paid Transfer with newOwner = treasury
+        facility <- create this with liquidity = newLiquidity; capacity = capacity - redeemAmount
+        pure (facility, cash, remainder)
+
+    choice SetOpen : ContractId RedemptionFacility
+      with
+        open : Bool
+      controller fundAgent
+      do create this with isOpen = open
+
+    -- | MOCK yield: mints additional productive units to the treasury
+    -- (stable-NAV dividend reinvestment). Demo/test illustration only.
+    nonconsuming choice AccrueYield : ContractId Holding
+      with
+        yieldAmount : Decimal
+      controller fundAgent
+      do create Holding with
+           issuer = fundAgent
+           owner = treasury
+           instrument = productiveInstrument
+           amount = yieldAmount

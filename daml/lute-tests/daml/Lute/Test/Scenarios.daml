@@ -1,0 +1,321 @@
+-- | Spec §45 scenarios and §46 contract tests. Every read uses the party's own
+-- rights (`query @T party`), never an admin view filtered afterwards.
+module Lute.Test.Scenarios where
+
+import DA.Foldable (forA_)
+import DA.Optional (isNone, isSome)
+import Daml.Script
+import Lute.Receipts
+import Lute.Routing
+import Lute.TestAsset
+import Lute.Types
+import Lute.Workflow
+import Lute.Test.Setup
+
+-- S1 — Happy path: cash first, redeem exactly 4,800, 2-of-3, five payees, receipts.
+testS1HappyPath : Script ()
+testS1HappyPath = do
+  w <- setupWorld demo
+  let p = w.p
+  prop0 <- propose w 4800.0
+  prop1 <- approve p.financeOp prop0
+  prop2 <- approve p.treasuryOp prop1
+  fr <- execute w w.facility prop2
+
+  forA_ (zip (payees p) demo.amounts) $ \(payee, amount) -> do
+    bal <- balanceOf payee cashId
+    assertEq "payee paid" amount bal
+  balanceOf p.treasury rwaId >>= assertEq "RWA remaining productive" 10200.0
+  balanceOf p.treasury cashId >>= assertEq "treasury cash after payroll" 0.0
+
+  Some receipt <- queryContractId p.financeViewer fr
+  assertEq "finance receipt route" CashThenRedeem receipt.plan.route
+  assertEq "finance receipt cash used" 20000.0 receipt.plan.cashUsed
+  assertEq "finance receipt redemption" 4800.0 receipt.plan.redeemAmount
+  assertEq "finance receipt remaining" 10200.0 receipt.plan.remainingProductive
+  assertEq "finance receipt payouts" 5 (length receipt.payouts)
+  assertEq "finance receipt approvals" 2 (length receipt.approvals)
+
+  -- Batch and proposal are consumed: no double execution.
+  batches <- query @PaymentBatch p.treasury
+  assertEq "batch consumed" 0 (length batches)
+  executeMustFail w p.treasury w.facility prop2
+
+-- S2 — Threshold: one approval blocks execution, the second enables it.
+testS2ApprovalThreshold : Script ()
+testS2ApprovalThreshold = do
+  w <- setupWorld demo
+  let p = w.p
+  prop1 <- propose w 4800.0 >>= approve p.financeOp
+  executeRejectedWith "insufficient approvals" w w.facility prop1
+  prop2 <- approve p.riskOp prop1
+  -- Approvers cannot execute directly; only the treasury submits, gated by approvals.
+  executeMustFail w p.riskOp w.facility prop2
+  _ <- execute w w.facility prop2
+  balanceOf p.alice cashId >>= assertEq "alice paid after threshold" 5200.0
+
+-- S3 — Unauthorized approvals are rejected, including parties that can see the proposal.
+testS3UnauthorizedApproval : Script ()
+testS3UnauthorizedApproval = do
+  w <- setupWorld demo
+  let p = w.p
+  prop <- propose w 4800.0
+  submitMustFail p.outsider do exerciseCmd prop Approve with approver = p.outsider
+  rejectedWith "not an authorized approver" p.financeViewer do exerciseCmd prop Approve with approver = p.financeViewer
+  -- Treasury cannot approve on an operator's behalf.
+  submitMustFail p.treasury do exerciseCmd prop Approve with approver = p.financeOp
+  executeMustFail w p.outsider w.facility prop
+
+testDuplicateApproval : Script ()
+testDuplicateApproval = do
+  w <- setupWorld demo
+  let p = w.p
+  prop1 <- propose w 4800.0 >>= approve p.financeOp
+  rejectedWith "duplicate approval" p.financeOp do exerciseCmd prop1 Approve with approver = p.financeOp
+  -- Still one approval: execution stays blocked.
+  executeRejectedWith "insufficient approvals" w w.facility prop1
+
+-- Nothing was paid, nothing was redeemed, no receipts exist, and the proposal survives.
+assertNothingSettled : World -> ContractId ExecutionProposal -> Script ()
+assertNothingSettled w prop = do
+  let p = w.p
+  forA_ (payees p) $ \payee -> do
+    balanceOf payee cashId >>= assertEq "payee unpaid" 0.0
+    receipts <- query @PayeeReceipt payee
+    assertEq "no payee receipt" 0 (length receipts)
+  balanceOf p.treasury rwaId >>= assertEq "RWA untouched" 15000.0
+  balanceOf p.treasury cashId >>= assertEq "cash untouched" 20000.0
+  finance <- query @FinanceReceipt p.financeViewer
+  assertEq "no finance receipt" 0 (length finance)
+  audit <- query @AuditReceipt p.auditor
+  assertEq "no audit receipt" 0 (length audit)
+  live <- queryContractId p.treasury prop
+  assertMsg "proposal still active" (isSome live)
+
+-- S4a — Facility closed after approval: redemption fails, whole execution rolls back.
+testS4RedemptionClosedRollsBack : Script ()
+testS4RedemptionClosedRollsBack = do
+  w <- setupWorld demo
+  let p = w.p
+  prop <- propose w 4800.0 >>= approve p.financeOp >>= approve p.treasuryOp
+  closed <- submit p.fundAgent do exerciseCmd w.facility SetOpen with open = False
+  executeRejectedWith "redemption facility is closed" w closed prop
+  assertNothingSettled w prop
+
+-- S4b — Fund liquidity short: failure happens inside the redemption after
+-- productive units were burned in the same transaction; all of it rolls back.
+testS4RedemptionMidwayFailureRollsBack : Script ()
+testS4RedemptionMidwayFailureRollsBack = do
+  w <- setupWorld (demo with fundLiquidity = 3000.0)
+  let p = w.p
+  prop <- propose w 4800.0 >>= approve p.financeOp >>= approve p.treasuryOp
+  executeRejectedWith "insufficient fund liquidity" w w.facility prop
+  assertNothingSettled w prop
+
+-- S5 — AI overruled: a proposal to redeem 8,000 is rejected by policy.
+testS5AiOverruled : Script ()
+testS5AiOverruled = do
+  w <- setupWorld demo
+  let p = w.p
+  rejectedWith "rejected by treasury policy" p.treasury do
+    exerciseCmd w.batch ProposeExecution with
+      policyCid = w.policy
+      cashHoldings = w.cash
+      productiveHoldings = w.productive
+      facilityCid = Some w.facility
+      proposedRedeem = 8000.0
+      aiNote = Some AiNote with summary = "redeem 8000"; recommendedRedeem = Some 8000.0; agreesWithVerified = False
+  -- The AI disagreement may be recorded, but only the verified amount is accepted.
+  prop <- submit p.treasury do
+    exerciseCmd w.batch ProposeExecution with
+      policyCid = w.policy
+      cashHoldings = w.cash
+      productiveHoldings = w.productive
+      facilityCid = Some w.facility
+      proposedRedeem = 4800.0
+      aiNote = Some AiNote with summary = "redeem 8000"; recommendedRedeem = Some 8000.0; agreesWithVerified = False
+  Some proposal <- queryContractId p.treasury prop
+  assertEq "verified redemption kept" 4800.0 proposal.plan.redeemAmount
+
+-- S6 — Privacy: same financial event, different authorized views.
+testS6Privacy : Script ()
+testS6Privacy = do
+  w <- setupWorld demo
+  let p = w.p
+  -- Before execution, payees cannot see the batch or the proposal.
+  prop <- propose w 4800.0
+  forA_ (payees p) $ \payee -> do
+    b <- query @PaymentBatch payee
+    assertEq "payee cannot see batch" 0 (length b)
+    ps <- query @ExecutionProposal payee
+    assertEq "payee cannot see proposal" 0 (length ps)
+  auditorProps <- query @ExecutionProposal p.auditor
+  assertEq "auditor cannot see proposal" 0 (length auditorProps)
+
+  prop2 <- approve p.financeOp prop >>= approve p.treasuryOp
+  _ <- execute w w.facility prop2
+
+  -- Each payee sees exactly their own receipt and holding.
+  forA_ (zip (payees p) demo.amounts) $ \(payee, amount) -> do
+    receipts <- query @PayeeReceipt payee
+    assertEq "payee sees one receipt" 1 (length receipts)
+    let [(_, r)] = receipts
+    assertMsg "receipt is the payee's own" (r.payee == payee)
+    assertEq "receipt amount" amount r.amount
+    holdings <- query @Holding payee
+    assertMsg "payee sees only own holdings" (all (\(_, h) -> h.owner == payee) holdings)
+    fr <- query @FinanceReceipt payee
+    assertEq "payee cannot see finance receipt" 0 (length fr)
+    ar <- query @AuditReceipt payee
+    assertEq "payee cannot see audit receipt" 0 (length ar)
+
+  -- Alice cannot see Ben's receipt specifically.
+  benReceipts <- query @PayeeReceipt p.ben
+  let [(benReceiptCid, _)] = benReceipts
+  aliceViewOfBen <- queryContractId p.alice benReceiptCid
+  assertMsg "alice cannot see ben's receipt" (isNone aliceViewOfBen)
+
+  -- Auditor: aggregate evidence only.
+  audit <- query @AuditReceipt p.auditor
+  assertEq "auditor sees one audit receipt" 1 (length audit)
+  let [(_, a)] = audit
+  assertEq "audit total" 24800.0 a.total
+  assertEq "audit line count" 5 a.lineCount
+  assertEq "audit approvals" 2 (length a.approvals)
+  auditorPayee <- query @PayeeReceipt p.auditor
+  assertEq "auditor cannot see payee receipts" 0 (length auditorPayee)
+  auditorFinance <- query @FinanceReceipt p.auditor
+  assertEq "auditor cannot see finance receipt" 0 (length auditorFinance)
+
+  -- Finance sees the full batch.
+  finance <- query @FinanceReceipt p.financeViewer
+  assertEq "finance sees one receipt" 1 (length finance)
+  let [(_, f)] = finance
+  assertEq "finance sees all lines" 5 (length f.payouts)
+
+  -- FundAgent sees its redemption-side state but no payroll data.
+  agentHoldings <- query @Holding p.fundAgent
+  assertMsg "fund agent sees no payee holdings"
+    (all (\(_, h) -> h.owner `notElem` payees p) agentHoldings)
+  agentPayee <- query @PayeeReceipt p.fundAgent
+  assertEq "fund agent cannot see payee receipts" 0 (length agentPayee)
+  agentFinance <- query @FinanceReceipt p.fundAgent
+  assertEq "fund agent cannot see finance receipt" 0 (length agentFinance)
+  agentAudit <- query @AuditReceipt p.fundAgent
+  assertEq "fund agent cannot see audit receipt" 0 (length agentAudit)
+  agentFacility <- query @RedemptionFacility p.fundAgent
+  assertEq "fund agent sees its facility" 1 (length agentFacility)
+
+  -- Outsider sees nothing at all.
+  o1 <- query @PaymentBatch p.outsider
+  o2 <- query @ExecutionProposal p.outsider
+  o3 <- query @PayeeReceipt p.outsider
+  o4 <- query @FinanceReceipt p.outsider
+  o5 <- query @AuditReceipt p.outsider
+  o6 <- query @Holding p.outsider
+  o7 <- query @RedemptionFacility p.outsider
+  assertEq "outsider sees nothing" [0, 0, 0, 0, 0, 0, 0]
+    [length o1, length o2, length o3, length o4, length o5, length o6, length o7]
+
+-- S8 — Insufficient treasury: blocked before any proposal exists.
+testS8InsufficientTreasury : Script ()
+testS8InsufficientTreasury = do
+  w <- setupWorld (demo with cash = 2000.0; rwa = 3000.0; amounts = [10000.0])
+  rejectedWith "blocked: InsufficientLiquidity" w.p.treasury do
+    exerciseCmd w.batch ProposeExecution with
+      policyCid = w.policy
+      cashHoldings = w.cash
+      productiveHoldings = w.productive
+      facilityCid = Some w.facility
+      proposedRedeem = 8000.0
+      aiNote = None
+  rejectedWith "blocked: InsufficientLiquidity" w.p.treasury do
+    exerciseCmd w.batch ProposeExecution with
+      policyCid = w.policy
+      cashHoldings = w.cash
+      productiveHoldings = w.productive
+      facilityCid = Some w.facility
+      proposedRedeem = 3000.0
+      aiNote = None
+  props <- query @ExecutionProposal w.p.treasury
+  assertEq "no proposal created" 0 (length props)
+
+testRedemptionCap : Script ()
+testRedemptionCap = do
+  w <- setupWorld (demo with maxRedeem = Some 4000.0)
+  rejectedWith "blocked: RedemptionCapExceeded" w.p.treasury do
+    exerciseCmd w.batch ProposeExecution with
+      policyCid = w.policy
+      cashHoldings = w.cash
+      productiveHoldings = w.productive
+      facilityCid = Some w.facility
+      proposedRedeem = 4800.0
+      aiNote = None
+
+testCashOnlyLeavesRwaInvested : Script ()
+testCashOnlyLeavesRwaInvested = do
+  w <- setupWorld (demo with cash = 30000.0)
+  let p = w.p
+  prop <- propose w 0.0 >>= approve p.financeOp >>= approve p.riskOp
+  _ <- submit p.treasury do
+    exerciseCmd prop Execute with
+      cashHoldings = w.cash
+      productiveHoldings = w.productive
+      facilityCid = None
+  balanceOf p.treasury rwaId >>= assertEq "RWA untouched" 15000.0
+  balanceOf p.treasury cashId >>= assertEq "cash remaining" 5200.0
+
+testCashBufferRespected : Script ()
+testCashBufferRespected = do
+  w <- setupWorld (demo with minCashBuffer = 1000.0)
+  let p = w.p
+  prop <- propose w 5800.0 >>= approve p.financeOp >>= approve p.treasuryOp
+  _ <- execute w w.facility prop
+  balanceOf p.treasury cashId >>= assertEq "buffer kept" 1000.0
+  balanceOf p.treasury rwaId >>= assertEq "RWA remaining" 9200.0
+
+-- Execution recomputes from live holdings; a changed treasury blocks it.
+testFundingChangedAfterApproval : Script ()
+testFundingChangedAfterApproval = do
+  w <- setupWorld demo
+  let p = w.p
+  prop <- propose w 4800.0 >>= approve p.financeOp >>= approve p.treasuryOp
+  let [cash] = w.cash
+  (moved, Some rest) <- submit p.treasury do exerciseCmd cash Split with splitAmount = 1000.0
+  _ <- submit p.treasury do exerciseCmd moved Transfer with newOwner = p.outsider
+  rejectedWith "funding conditions changed" p.treasury do
+    exerciseCmd prop Execute with
+      cashHoldings = [rest]
+      productiveHoldings = w.productive
+      facilityCid = Some w.facility
+
+-- Small batches below the large-payment threshold need one approval.
+testSmallBatchSingleApproval : Script ()
+testSmallBatchSingleApproval = do
+  w <- setupWorld (demo with amounts = [5000.0])
+  let p = w.p
+  prop <- propose w 0.0 >>= approve p.riskOp
+  _ <- execute w w.facility prop
+  balanceOf p.alice cashId >>= assertEq "alice paid" 5000.0
+
+testRejectReturnsBatch : Script ()
+testRejectReturnsBatch = do
+  w <- setupWorld demo
+  let p = w.p
+  prop <- propose w 4800.0
+  _ <- submit p.riskOp do exerciseCmd prop Reject with approver = p.riskOp
+  batches <- query @PaymentBatch p.treasury
+  assertEq "batch returned" 1 (length batches)
+  submitMustFail p.outsider do exerciseCmd prop Reject with approver = p.outsider
+
+-- Daml-side input validation mirrors the TypeScript router.
+testRoutingRejectsNegative : Script ()
+testRoutingRejectsNegative = do
+  let policy = RoutingPolicy with minCashBuffer = 0.0; maxRedeemPerExecution = None; allowedRoutes = [CashOnly, CashThenRedeem]
+      bad = RoutingInput with cash = -1.0; productive = 15000.0; redeemable = 15000.0; obligation = 24800.0; policy
+      inconsistent = RoutingInput with cash = 1.0; productive = 100.0; redeemable = 101.0; obligation = 50.0; policy
+  assertMsg "negative rejected" (isLeft (computeFundingRoute bad))
+  assertMsg "redeemable > productive rejected" (isLeft (computeFundingRoute inconsistent))
+  where
+    isLeft (Left _) = True
+    isLeft _ = False

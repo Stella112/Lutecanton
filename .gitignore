@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.next/
+coverage/
+*.log
+
+# Daml build output
+.daml/
+*.dar
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key

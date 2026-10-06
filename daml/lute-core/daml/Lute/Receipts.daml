@@ -1,0 +1,77 @@
+-- | Role-specific receipts (spec §24). Separate templates, not one contract
+-- with hidden fields: each audience is a stakeholder of its own contract only.
+module Lute.Receipts where
+
+import Lute.TestAsset (Holding)
+import Lute.Types
+
+-- | Visible to the treasury and one payee only. No other payees, no totals,
+-- no treasury balances, no funding route.
+template PayeeReceipt
+  with
+    treasury : Party
+    payee : Party
+    employer : Text
+    batchRef : Text
+    lineRef : Text
+    period : Text
+    amount : Decimal
+    paymentInstrument : Text
+    holding : ContractId Holding
+    settlementState : SettlementState
+    settledAt : Time
+  where
+    signatory treasury
+    observer payee
+
+data PayoutRef = PayoutRef with
+    lineRef : Text
+    payee : Party
+    amount : Decimal
+    holding : ContractId Holding
+  deriving (Eq, Show)
+
+-- | Full record for finance: every line, route, approvals and settlement refs.
+template FinanceReceipt
+  with
+    treasury : Party
+    financeViewer : Party
+    organizationName : Text
+    batchRef : Text
+    period : Text
+    total : Decimal
+    paymentInstrument : Text
+    plan : FundingPlan
+    aiNote : Optional AiNote
+    policyVersion : Int
+    requiredApprovals : Int
+    approvals : [Party]
+    payouts : [PayoutRef]
+    settlementState : SettlementState
+    settledAt : Time
+  where
+    signatory treasury
+    observer financeViewer
+
+-- | Aggregate evidence for the auditor: totals, count, route summary and
+-- governance result. No employee-level amounts or payees.
+template AuditReceipt
+  with
+    treasury : Party
+    auditor : Party
+    organizationName : Text
+    batchRef : Text
+    period : Text
+    total : Decimal
+    lineCount : Int
+    paymentInstrument : Text
+    route : Route
+    redeemAmount : Decimal
+    policyVersion : Int
+    requiredApprovals : Int
+    approvals : [Party]
+    settlementState : SettlementState
+    settledAt : Time
+  where
+    signatory treasury
+    observer auditor

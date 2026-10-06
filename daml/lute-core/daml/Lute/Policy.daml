@@ -1,0 +1,48 @@
+module Lute.Policy where
+
+import DA.List (unique)
+import Lute.Routing (RoutingPolicy(..))
+import Lute.Types
+
+-- | Governs treasury execution. Signed by the treasury; visible to approvers
+-- and finance. Not visible to the auditor or payees.
+template TreasuryPolicy
+  with
+    treasury : Party
+    organizationName : Text
+    financeViewer : Party
+    approvers : [Party]
+    approvalThreshold : Int
+    -- | Batches with total >= this need `approvalThreshold` approvals;
+    -- smaller batches need one.
+    largePaymentThreshold : Decimal
+    minCashBuffer : Decimal
+    maxRedeemPerExecution : Optional Decimal
+    allowedRoutes : [Route]
+    paymentInstrument : InstrumentRef
+    productiveInstrument : InstrumentRef
+    auditor : Party
+    version : Int
+  where
+    signatory treasury
+    observer financeViewer, approvers
+    ensure
+      approvalThreshold >= 1
+      && approvalThreshold <= length approvers
+      && unique approvers
+      && treasury `notElem` approvers
+      && largePaymentThreshold >= 0.0
+      && minCashBuffer >= 0.0
+      && optional True (> 0.0) maxRedeemPerExecution
+      && not (null allowedRoutes)
+      && organizationName /= ""
+
+approvalsRequiredFor : TreasuryPolicy -> Decimal -> Int
+approvalsRequiredFor policy total =
+  if total >= policy.largePaymentThreshold then policy.approvalThreshold else 1
+
+routingPolicyOf : TreasuryPolicy -> RoutingPolicy
+routingPolicyOf p = RoutingPolicy with
+  minCashBuffer = p.minCashBuffer
+  maxRedeemPerExecution = p.maxRedeemPerExecution
+  allowedRoutes = p.allowedRoutes
