@@ -68,6 +68,28 @@ function Connected() {
 
   const wrongNetwork = networkId !== EXPECTED_NETWORK;
 
+  // Grofty can be connected to this site while no wallet is selected inside the extension;
+  // reads then fail with -32603 "No active wallet selected".
+  if (!account) {
+    return (
+      <Card>
+        <p className="font-medium">Connected to Grofty on {networkId ?? "an unknown network"}, but no wallet is selected.</p>
+        <p className="mt-1 text-sm text-muted">
+          Open the Grofty extension, select (or create) your Canton wallet, then refresh.
+        </p>
+        <div className="flex gap-3">
+          <button onClick={refresh} className={buttonClass}>
+            Refresh
+          </button>
+          <button onClick={() => void disconnect()} disabled={isDisconnecting} className={secondaryButtonClass}>
+            Disconnect
+          </button>
+        </div>
+        <RpcErrorLine error={error} />
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <Card>
