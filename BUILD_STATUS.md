@@ -4,7 +4,7 @@ _Last updated: 2026-10-06_
 
 ## Current milestone
 
-M5 (full workflow on a running ledger) is done on a local single-participant sandbox. M7 (frontend) has its core screens. DevNet (M8) is waiting on a NODERS Console invite.
+M8 done: the full Lute workflow is verified on HackCanton DevNet (docs/PROOF.md #5–6). Now: M11 submission (README, demo script, brief done; video and screenshots pending).
 
 ## Completed
 
