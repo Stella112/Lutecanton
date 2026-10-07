@@ -100,6 +100,17 @@ export function partyLabels(parties: PartyRegistry): Record<string, string> {
 
 /** Maps errors to JSON responses. Never turns a failure into success. */
 export function errorResponse(e: unknown): Response {
+  if (isLedgerError(e) && /security-sensitive/i.test(e.message)) {
+    // Canton hides the cause of permission/auth failures; the trace id finds it in Grafana.
+    return Response.json(
+      {
+        error: "ledger_permission_denied",
+        message: `The ledger refused this request (permission denied). Check that the party exists in the Console, the lute-core DAR is uploaded, and CANTON_LEDGER_USER_ID matches your user.${e.traceId ? ` Trace id: ${e.traceId}` : ""}`,
+        traceId: e.traceId,
+      },
+      { status: 403 },
+    );
+  }
   if (isLedgerError(e)) {
     return Response.json({ error: "ledger_rejected", code: e.code, message: e.message, traceId: e.traceId }, { status: 422 });
   }

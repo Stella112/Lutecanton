@@ -145,6 +145,18 @@ export class LedgerClient {
     return r.partyDetails.party;
   }
 
+  /**
+   * Parties this ledger user may act as. Works for tenant users on shared nodes,
+   * where listing all parties (`/v2/parties`) requires participant-admin rights.
+   */
+  async actAsParties(): Promise<string[]> {
+    const r = await this.call<{ rights?: { kind?: { CanActAs?: { value: { party: string } } } }[] }>(
+      "GET",
+      `/v2/users/${encodeURIComponent(this.userId)}/rights`,
+    );
+    return (r.rights ?? []).flatMap((x) => (x.kind?.CanActAs ? [x.kind.CanActAs.value.party] : []));
+  }
+
   async listParties(): Promise<string[]> {
     const r = await this.call<{ partyDetails: { party: string }[] }>("GET", "/v2/parties");
     return r.partyDetails.map((p) => p.party);

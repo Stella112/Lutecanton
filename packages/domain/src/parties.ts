@@ -55,10 +55,16 @@ export async function ensureParties(client: LedgerClient, prefix: string): Promi
   return existing as PartyRegistry;
 }
 
-/** DevNet: parties are created in the Console; fail clearly if any is missing. */
+/**
+ * DevNet: parties are created in the Console, which grants the team user CanActAs.
+ * Discovered from the user's own rights (tenant users may not list all parties).
+ * Fails clearly if any role party is missing.
+ */
 export async function discoverParties(client: LedgerClient, prefix: string): Promise<PartyRegistry> {
-  const found = matchParties(await client.listParties(), prefix);
+  const found = matchParties(await client.actAsParties(), prefix);
   const missing = ROLES.filter((r) => !found[r]);
-  if (missing.length) throw new Error(`missing parties on ledger: ${missing.join(", ")}`);
+  if (missing.length) {
+    throw new Error(`Lute parties missing on the ledger (create them in the NODERS Console): ${missing.map((r) => prefix + r).join(", ")}`);
+  }
   return found as PartyRegistry;
 }
