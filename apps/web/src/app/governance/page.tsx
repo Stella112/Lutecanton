@@ -28,7 +28,7 @@ export default function GovernancePage() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <NetworkBanner network={data.network} />
+        <NetworkBanner network={data.network} instruments={data.state.instruments} />
         <h1 className="text-2xl font-semibold tracking-tight text-navy">Governance · {p.payload.batch.batchRef}</h1>
       </div>
 

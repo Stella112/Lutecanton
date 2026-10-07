@@ -110,7 +110,7 @@ function ContractCard({ c, labels }: { c: ContractView; labels: Record<string, s
       return (
         <div className={box}>
           {head("Holding")}
-          <Row k="Instrument" v={`${p.instrument} (MOCK)`} />
+          <Row k="Instrument" v={`${p.instrument} (test asset)`} />
           <Row k="Amount" v={fmt(p.amount)} />
           <Row k="Owner" v={who(p.owner, labels)} />
         </div>

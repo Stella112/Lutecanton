@@ -43,6 +43,12 @@ One ledger user holds read rights for all team parties. Each role view queries `
 
 Errors include a trace id (`tid …`). Search it in Grafana (https://grafana.participant.hackcanton-01.devnet.naas.noders.services/). NODERS support on Telegram: @mrlp8, @savetheales, @ram_noders. Send them the ledger user id, party/package ids, the tid and the timestamp, never a token.
 
+## Node facts (from the Console, 2026-10-07)
+
+- Team participant: `hackcanton-devnet-3`, Ledger API version 3.6.1, endpoints as above.
+- Lute parties are created as `<namespace prefix><Role>`; the app finds them via `LUTE_PARTY_PREFIX`.
+- On DevNet the app uses the test instruments `LUTE-USD-DEV` and `LUTE-RWA-DEV` (DEVNET TEST), never the `-L` LocalNet mocks.
+
 ## Open risk
 
 The node's supported Daml-LF version is not yet confirmed against our SDK 3.5.12 build. Check with `GET /v2/version` once a token is available, or the DAR upload will reject it.

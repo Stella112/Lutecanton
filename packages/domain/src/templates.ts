@@ -24,6 +24,17 @@ export function templateNameOf(templateId: string): TemplateName | null {
   return null;
 }
 
-// MOCK instrument ids (spec §13). Never call these USDCx / USYC.
-export const MOCK_CASH = "cUSD-L";
-export const MOCK_RWA = "cMMF-L";
+/** Test instrument ids for one network. Never named USDCx / USYC. */
+export interface Instruments {
+  /** Payment asset id. */
+  cash: string;
+  /** Productive RWA id. */
+  rwa: string;
+  /** Human label shown in the UI. */
+  label: string;
+}
+
+// spec §13: MOCK LOCALNET PAYMENT ASSET / MOCK LOCALNET PRODUCTIVE RWA.
+export const LOCAL_TEST_ASSETS: Instruments = { cash: "cUSD-L", rwa: "cMMF-L", label: "MOCK LOCALNET" };
+// spec §14: DEVNET TEST RWA (no suitable real productive asset verified on DevNet).
+export const DEVNET_TEST_ASSETS: Instruments = { cash: "LUTE-USD-DEV", rwa: "LUTE-RWA-DEV", label: "DEVNET TEST" };

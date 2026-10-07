@@ -42,6 +42,7 @@ export interface StateResponse {
   parties: Record<string, string>;
   explanation: Explanation | null;
   state: {
+    instruments: { cash: string; rwa: string; label: string };
     cash: string;
     productive: string;
     total: string;

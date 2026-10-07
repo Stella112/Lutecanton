@@ -17,22 +17,22 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <NetworkBanner network={data.network} />
+        <NetworkBanner network={data.network} instruments={data.state.instruments} />
         <h1 className="text-2xl font-semibold tracking-tight text-navy">Treasury</h1>
       </div>
 
-      {!s.policy && data.network === "local" && (
+      {!s.policy && (
         <Card>
-          <p className="text-sm text-muted">The local ledger has no treasury yet.</p>
+          <p className="text-sm text-muted">This ledger has no Lute treasury yet for these parties.</p>
           <div className="mt-3">
-            <ActionButton label="Create demo treasury (MOCK assets)" run={() => postJson("/api/seed")} onDone={reload} />
+            <ActionButton label={`Create demo treasury (${s.instruments.label} assets)`} run={() => postJson("/api/seed")} onDone={reload} />
           </div>
         </Card>
       )}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card><Stat label="Liquid payment asset" value={fmt(s.cash)} note="cUSD-L · MOCK" /></Card>
-        <Card><Stat label="Productive assets" value={fmt(s.productive)} note="cMMF-L · MOCK productive RWA" /></Card>
+        <Card><Stat label="Liquid payment asset" value={fmt(s.cash)} note={`${s.instruments.cash} · ${s.instruments.label} payment asset`} /></Card>
+        <Card><Stat label="Productive assets" value={fmt(s.productive)} note={`${s.instruments.rwa} · ${s.instruments.label} productive RWA`} /></Card>
         <Card><Stat label="Total treasury" value={fmt(s.total)} /></Card>
       </div>
 

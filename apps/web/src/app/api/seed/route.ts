@@ -1,10 +1,12 @@
-import { assertSameOrigin, errorResponse, lute, network } from "@/server/lute";
+import { assertSameOrigin, errorResponse, lute } from "@/server/lute";
 
-/** Local sandbox only: creates the MOCK demo world (no-op if it exists). */
+/**
+ * Creates the demo treasury with clearly labelled test assets (no-op if it exists).
+ * Allowed on the local sandbox and on DevNet, where all parties are this team's own.
+ */
 export async function POST(req: Request) {
   const denied = assertSameOrigin(req);
   if (denied) return denied;
-  if (network() !== "local") return Response.json({ error: "forbidden", message: "seeding is local-only" }, { status: 403 });
   try {
     return Response.json(await (await lute()).seed());
   } catch (e) {

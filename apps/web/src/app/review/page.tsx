@@ -39,7 +39,7 @@ export default function ReviewPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <NetworkBanner network={data.network} />
+        <NetworkBanner network={data.network} instruments={data.state.instruments} />
         <h1 className="text-2xl font-semibold tracking-tight text-navy">Funding review · {batch.batchRef}</h1>
       </div>
 

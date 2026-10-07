@@ -7,7 +7,7 @@
 import { type ActiveContract, LedgerClient, LedgerError, toDisclosed } from "@lute/canton";
 import { computeFundingRoute, formatAmount, parseAmount, type RoutingResult } from "@lute/routing";
 import { APPROVERS, PAYEES, type PartyRegistry, type Role } from "./parties.ts";
-import { MOCK_CASH, MOCK_RWA, T, type TemplateName, templateNameOf } from "./templates.ts";
+import { type Instruments, LOCAL_TEST_ASSETS, T, type TemplateName, templateNameOf } from "./templates.ts";
 
 export interface Scenario {
   batchRef: string;
@@ -50,6 +50,7 @@ export interface ContractView {
 }
 
 export interface TreasuryState {
+  instruments: Instruments;
   cash: string;
   productive: string;
   total: string;
@@ -67,10 +68,12 @@ const sumAmounts = (xs: string[]) => formatAmount(xs.reduce((a, x) => a + parseA
 export class LuteLedger {
   readonly client: LedgerClient;
   readonly parties: PartyRegistry;
+  readonly instruments: Instruments;
 
-  constructor(client: LedgerClient, parties: PartyRegistry) {
+  constructor(client: LedgerClient, parties: PartyRegistry, instruments: Instruments = LOCAL_TEST_ASSETS) {
     this.client = client;
     this.parties = parties;
+    this.instruments = instruments;
   }
 
   private async as(role: Role, templates?: TemplateName[], blob = false): Promise<ActiveContract[]> {
@@ -104,23 +107,23 @@ export class LuteLedger {
         minCashBuffer: dec(s.minCashBuffer),
         maxRedeemPerExecution: s.maxRedeemPerExecution === null ? null : dec(s.maxRedeemPerExecution),
         allowedRoutes: ["CashOnly", "CashThenRedeem"],
-        paymentInstrument: { issuer: p.CashIssuer, id: MOCK_CASH },
-        productiveInstrument: { issuer: p.FundAgent, id: MOCK_RWA },
+        paymentInstrument: { issuer: p.CashIssuer, id: this.instruments.cash },
+        productiveInstrument: { issuer: p.FundAgent, id: this.instruments.rwa },
         auditor: p.Auditor,
         version: "1",
       }),
     ]);
-    if (parseAmount(s.cash) > 0n) await this.submit("CashIssuer", `${tag}-cash`, [holding(p.CashIssuer, p.Treasury, MOCK_CASH, s.cash)]);
-    if (parseAmount(s.rwa) > 0n) await this.submit("FundAgent", `${tag}-rwa`, [holding(p.FundAgent, p.Treasury, MOCK_RWA, s.rwa)]);
-    const liq = await this.submit("CashIssuer", `${tag}-liquidity`, [holding(p.CashIssuer, p.FundAgent, MOCK_CASH, s.fundLiquidity)]);
+    if (parseAmount(s.cash) > 0n) await this.submit("CashIssuer", `${tag}-cash`, [holding(p.CashIssuer, p.Treasury, this.instruments.cash, s.cash)]);
+    if (parseAmount(s.rwa) > 0n) await this.submit("FundAgent", `${tag}-rwa`, [holding(p.FundAgent, p.Treasury, this.instruments.rwa, s.rwa)]);
+    const liq = await this.submit("CashIssuer", `${tag}-liquidity`, [holding(p.CashIssuer, p.FundAgent, this.instruments.cash, s.fundLiquidity)]);
     const liquidity = createdId(liq.events, "Holding");
     await this.submit("FundAgent", `${tag}-facility`, [
       create(T.RedemptionFacility, {
         fundAgent: p.FundAgent,
         treasury: p.Treasury,
-        productiveInstrument: MOCK_RWA,
+        productiveInstrument: this.instruments.rwa,
         cashIssuer: p.CashIssuer,
-        cashInstrument: MOCK_CASH,
+        cashInstrument: this.instruments.cash,
         liquidity,
         capacity: dec(s.capacity),
         isOpen: true,
@@ -134,7 +137,7 @@ export class LuteLedger {
         period: s.period,
         lines: s.amounts.map((amount, i) => ({ payee: p[PAYEES[i]!], amount: dec(amount), lineRef: `${s.batchRef}-L${i + 1}` })),
         total: dec(sumAmounts(s.amounts)),
-        paymentInstrument: MOCK_CASH,
+        paymentInstrument: this.instruments.cash,
         createdAt: new Date().toISOString(),
       }),
     ]);
@@ -147,8 +150,8 @@ export class LuteLedger {
     const all = await this.as("Treasury");
     const of = (name: TemplateName) => all.filter((c) => templateNameOf(c.createdEvent.templateId) === name);
     const holdings = of("Holding").map((c) => c.createdEvent.createArgument as { issuer: string; owner: string; instrument: string; amount: string });
-    const cash = sumAmounts(holdings.filter((h) => h.owner === p.Treasury && h.issuer === p.CashIssuer && h.instrument === MOCK_CASH).map((h) => h.amount));
-    const productive = sumAmounts(holdings.filter((h) => h.owner === p.Treasury && h.issuer === p.FundAgent && h.instrument === MOCK_RWA).map((h) => h.amount));
+    const cash = sumAmounts(holdings.filter((h) => h.owner === p.Treasury && h.issuer === p.CashIssuer && h.instrument === this.instruments.cash).map((h) => h.amount));
+    const productive = sumAmounts(holdings.filter((h) => h.owner === p.Treasury && h.issuer === p.FundAgent && h.instrument === this.instruments.rwa).map((h) => h.amount));
     const [policyC] = of("TreasuryPolicy");
     const [batchC] = of("PaymentBatch");
     const [proposalC] = of("ExecutionProposal");
@@ -179,6 +182,7 @@ export class LuteLedger {
     }
 
     return {
+      instruments: this.instruments,
       cash,
       productive,
       total: sumAmounts([cash, productive]),
@@ -208,7 +212,7 @@ export class LuteLedger {
           return a.owner === p.Treasury && a.issuer === issuer && a.instrument === instrument;
         })
         .map((c) => c.createdEvent.contractId);
-    return { cash: pick(p.CashIssuer, MOCK_CASH), productive: pick(p.FundAgent, MOCK_RWA) };
+    return { cash: pick(p.CashIssuer, this.instruments.cash), productive: pick(p.FundAgent, this.instruments.rwa) };
   }
 
   /**

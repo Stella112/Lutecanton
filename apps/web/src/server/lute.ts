@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { isLedgerError, LedgerClient, passwordGrant } from "@lute/canton";
-import { discoverParties, ensureParties, LuteLedger, type PartyRegistry } from "@lute/domain";
+import { DEVNET_TEST_ASSETS, discoverParties, ensureParties, LOCAL_TEST_ASSETS, LuteLedger, type PartyRegistry } from "@lute/domain";
 import { buildAiInput, explainRoute, qwenConfigFromEnv, type Explanation } from "@lute/ai";
 import { formatAmount, parseAmount } from "@lute/routing";
 
@@ -41,7 +41,7 @@ async function init(): Promise<LuteLedger> {
     });
     const dar = process.env.LUTE_DAR_PATH ?? resolve(process.cwd(), "../../dist/lute-core-0.1.0.dar");
     await client.uploadDar(readFileSync(dar));
-    return new LuteLedger(client, await ensureParties(client, prefix));
+    return new LuteLedger(client, await ensureParties(client, prefix), LOCAL_TEST_ASSETS);
   }
   const env = requireEnv(["CANTON_JSON_LEDGER_API_URL", "CANTON_OIDC_TOKEN_URL", "CANTON_CLIENT_ID", "CANTON_USERNAME", "CANTON_PASSWORD", "CANTON_LEDGER_USER_ID", "LUTE_PARTY_PREFIX"]);
   const client = new LedgerClient({
@@ -55,7 +55,7 @@ async function init(): Promise<LuteLedger> {
     }),
   });
   // On DevNet the DAR is uploaded and parties are created in the NODERS Console.
-  return new LuteLedger(client, await discoverParties(client, prefix));
+  return new LuteLedger(client, await discoverParties(client, prefix), DEVNET_TEST_ASSETS);
 }
 
 function requireEnv<K extends string>(keys: K[]): Record<K, string> {

@@ -29,7 +29,7 @@ export default function SettlementPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <NetworkBanner network={st.data.network} />
+        <NetworkBanner network={st.data.network} instruments={st.data.state.instruments} />
         <h1 className="text-2xl font-semibold tracking-tight text-navy">Settlement</h1>
       </div>
 
