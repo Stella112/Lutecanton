@@ -87,6 +87,17 @@ export function Dashboard() {
           <p className="text-sm text-muted">
             No open obligation. {s.financeReceipts > 0 && <Link href="/privacy" className="text-accent hover:underline">See settled receipts →</Link>}
           </p>
+          <div className="mt-4">
+            <ActionButton
+              label={`Start new payroll run (${s.instruments.label} assets)`}
+              variant="secondary"
+              run={() => postJson("/api/new-run")}
+              onDone={reload}
+            />
+            <p className="mt-2 text-xs text-muted">
+              Demo replay: the test issuers top the treasury back up to 20,000 cash and 15,000 productive, and a new 24,800 batch opens.
+            </p>
+          </div>
         </Card>
       )}
     </div>

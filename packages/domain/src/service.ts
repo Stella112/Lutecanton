@@ -144,6 +144,47 @@ export class LuteLedger {
     return { seeded: true, batchRef: s.batchRef };
   }
 
+  /**
+   * Demo replay on an already-seeded ledger: tops the TEST treasury back up to the
+   * scenario balances (issuers mint only the difference) and opens a new batch.
+   * Refuses while a batch or proposal is still open.
+   */
+  async startNewRun(s: Scenario = DEMO): Promise<{ batchRef: string }> {
+    const p = this.parties;
+    const st = await this.treasuryState();
+    if (!st.policy) throw new Error("no treasury yet: create the demo treasury first");
+    if (st.batch || st.proposal) throw new Error("a payroll run is already open");
+    const run = st.financeReceipts + 1;
+    const batchRef = `${s.batchRef}-R${run}`;
+    const topUp = (target: string, current: string) => parseAmount(target) - parseAmount(current);
+    const mint = (issuer: Role, instrument: string, amount: bigint, tag: string) =>
+      this.submit(issuer, `${batchRef}-${tag}`, [
+        { CreateCommand: { templateId: T.Holding, createArguments: { issuer: p[issuer], owner: p.Treasury, instrument, amount: formatAmount(amount) } } },
+      ]);
+    const cashGap = topUp(s.cash, st.cash);
+    const rwaGap = topUp(s.rwa, st.productive);
+    if (cashGap > 0n) await mint("CashIssuer", this.instruments.cash, cashGap, "cash");
+    if (rwaGap > 0n) await mint("FundAgent", this.instruments.rwa, rwaGap, "rwa");
+    await this.submit("Treasury", `${batchRef}-batch`, [
+      {
+        CreateCommand: {
+          templateId: T.PaymentBatch,
+          createArguments: {
+            treasury: p.Treasury,
+            financeViewer: p.FinanceViewer,
+            batchRef,
+            period: s.period,
+            lines: s.amounts.map((amount, i) => ({ payee: p[PAYEES[i]!], amount: dec(amount), lineRef: `${batchRef}-L${i + 1}` })),
+            total: dec(sumAmounts(s.amounts)),
+            paymentInstrument: this.instruments.cash,
+            createdAt: new Date().toISOString(),
+          },
+        },
+      },
+    ]);
+    return { batchRef };
+  }
+
   /** Treasury's own view plus the verified route preview. */
   async treasuryState(): Promise<TreasuryState> {
     const p = this.parties;

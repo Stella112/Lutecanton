@@ -58,6 +58,26 @@ test("S1+S6 on a live ledger: exact-shortfall route, 2-of-3, atomic execution, p
   assert.ok(agent.every((c) => !PAYEES.some((r) => c.payload.owner === lute.parties[r])), "fund agent sees no payee holdings");
 });
 
+test("demo replay: a new run tops the test treasury back up and settles again", { skip }, async () => {
+  const lute = await world("rerun");
+  await lute.propose();
+  await lute.approve("FinanceOp");
+  await lute.approve("TreasuryOp");
+  await lute.execute();
+  await assert.rejects(lute.startNewRun().then(() => lute.startNewRun()), /already open/);
+  const st = await lute.treasuryState();
+  assert.equal(st.cash, "20000");
+  assert.equal(st.productive, "15000");
+  assert.equal(st.route?.redeemAmount, "4800");
+  await lute.propose();
+  await lute.approve("RiskOp");
+  await lute.approve("FinanceOp");
+  await lute.execute();
+  const after = await lute.treasuryState();
+  assert.equal(after.productive, "10200");
+  assert.equal(after.financeReceipts, 2);
+});
+
 test("S5 on a live ledger: AI-proposed 8,000 is rejected by Daml policy", { skip }, async () => {
   const lute = await world("s5");
   await assert.rejects(
