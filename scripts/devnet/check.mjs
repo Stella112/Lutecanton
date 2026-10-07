@@ -67,7 +67,23 @@ const version = await get("/v2/version");
 console.log("\n/v2/version:", version.status, JSON.stringify(version.body, null, 2));
 
 const rights = await get(`/v2/users/${encodeURIComponent(claims.sub)}/rights`);
-console.log(`\n/v2/users/<sub>/rights:`, rights.status, JSON.stringify(rights.body, null, 2));
+const actAs = (rights.body?.rights ?? []).flatMap((r) => (r.kind?.CanActAs ? [r.kind.CanActAs.value.party.split("::")[0]] : []));
+console.log(`\nuser rights (HTTP ${rights.status}): can act as ${actAs.length} parties: ${actAs.sort().join(", ")}`);
 
 const end = await get("/v2/state/ledger-end");
 console.log("\n/v2/state/ledger-end:", end.status, JSON.stringify(end.body));
+
+// Lute readiness: the 14 role parties (created in the Console with the team prefix) and the uploaded package.
+const ROLES = ["Treasury", "FinanceOp", "TreasuryOp", "RiskOp", "FinanceViewer", "Alice", "Ben", "Chidi", "David", "Eva", "Auditor", "FundAgent", "CashIssuer", "Outsider"];
+const prefix = (env.LUTE_PARTY_PREFIX ?? "").toLowerCase();
+const actAsHints = actAs.map((h) => h.toLowerCase());
+const missingRoles = ROLES.filter((r) => !actAsHints.includes(prefix + r.toLowerCase()));
+console.log(`\nLute role parties (prefix "${prefix}"): ${ROLES.length - missingRoles.length}/${ROLES.length}${missingRoles.length ? " - MISSING: " + missingRoles.join(", ") : " - all present"}`);
+
+const LUTE_PACKAGE_ID = "ad8c0d8d1debe8b2208eb24f7ee13ed5d2ca931739fd0c008d2ab728f4b69676";
+const pkgs = await get("/v2/packages");
+if (pkgs.status === 200) {
+  console.log("lute-core package uploaded:", (pkgs.body?.packageIds ?? []).includes(LUTE_PACKAGE_ID));
+} else {
+  console.log(`lute-core package uploaded: unknown (package list returned HTTP ${pkgs.status})`);
+}
