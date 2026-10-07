@@ -21,6 +21,16 @@ if (missing.length) {
 const env = process.env;
 const api = env.CANTON_JSON_LEDGER_API_URL.replace(/\/$/, "");
 
+// Safe diagnostics about how the credentials were read from .env (never the password itself).
+const pw = env.CANTON_PASSWORD;
+console.log(`username as read: [${env.CANTON_USERNAME}]`);
+console.log(
+  `password as read: ${pw.length} characters;`,
+  `leading/trailing space: ${pw !== pw.trim()};`,
+  `contains a quote character: ${/["']/.test(pw)};`,
+  `contains #: ${pw.includes("#")}`,
+);
+
 const tokenRes = await fetch(env.CANTON_OIDC_TOKEN_URL, {
   method: "POST",
   headers: { "Content-Type": "application/x-www-form-urlencoded" },
