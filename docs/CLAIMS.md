@@ -13,7 +13,8 @@ Statuses: PLANNED · IMPLEMENTED · TESTED · LOCALNET VERIFIED · DEVNET VERIFI
 | Atomic redeem + pay + receipts; rollback on redemption failure | TESTED | `testS4RedemptionClosedRollsBack`, `testS4RedemptionMidwayFailureRollsBack` |
 | Role-specific receipts; payee, auditor, fund agent and outsider isolation | TESTED (Daml Script, per-party queries) | `testS6Privacy` |
 | Full workflow on a running Canton ledger (JSON Ledger API): exact-shortfall route, 2-of-3, atomic execution, per-party views, AI 8,000 rejected, rollback on closed facility | TESTED (local single-participant sandbox, Canton 3.5.19) | `packages/domain` e2e 3/3; UI walkthrough 2026-10-06 |
-| Lute DAR on HackCanton DevNet | PLANNED | M8 |
+| Lute DAR deployed on HackCanton DevNet; full workflow (exact-shortfall route, 2-of-3 approval, atomic execution, 5 settlements, role-specific receipts) | DEVNET VERIFIED | docs/PROOF.md #5 |
+| Per-party privacy on DevNet: Alice sees only her receipt, Auditor only aggregates, Outsider nothing | DEVNET VERIFIED | docs/PROOF.md #6 |
 | BitSafe governance | PLANNED | M6; multi-node BLOCKED by hardware |
 | Node-failure tolerance (S7) | BLOCKED | needs a ≥ 16–32 GB host |
 | AI explanation: aggregate-only input, Zod-validated output, deterministic fallback, disagreement recorded | TESTED (fallback live; Qwen path with mocked HTTP, no key yet) | `@lute/ai` 8/8 |
